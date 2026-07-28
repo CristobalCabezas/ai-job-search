@@ -45,7 +45,10 @@ function parseDetailPage(html: string, url: string, fallbackId: string): DetailR
     throw new Error("Failed to parse job listing HTML")
   }
 
-  const companyNameMatch = html.match(/<span class="fake-hidden size-3">\s*in\s*([\s\S]*?)\s*<\/span>/)
+  // Company name: anchored on the itemprop microdata rather than the old
+  // "fake-hidden size-3" English "in {company}" span, which broke once the
+  // site started rendering that span in Spanish ("en {company}").
+  const companyNameMatch = html.match(/<strong itemprop="name">\s*([\s\S]*?)\s*<\/strong>/)
   const company = companyNameMatch ? decodeHtmlEntities(stripTags(companyNameMatch[1])) || null : null
 
   const companyUrlMatch = html.match(/class="gb-company-logo__link" href="([^"]+)"/)
@@ -54,16 +57,24 @@ function parseDetailPage(html: string, url: string, fallbackId: string): DetailR
   const jobLocationMatch = html.match(/itemprop="jobLocation"[\s\S]*?<\/h2>/)
   const jobLocationHtml = jobLocationMatch ? jobLocationMatch[0] : ""
 
+  // City is only a link on-site/hybrid postings (path moved from /jobs/city/
+  // to /empleos/ciudad/ in a site redesign); remote postings render "Remoto"
+  // as plain text instead, with no anchor at all.
   let location: string | null = null
-  const cityLinkMatch = jobLocationHtml.match(/<a[^>]+href="\/jobs\/city\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/)
-  if (cityLinkMatch) location = decodeHtmlEntities(stripTags(cityLinkMatch[1])) || null
+  const cityLinkMatch = jobLocationHtml.match(/<a[^>]+href="\/empleos\/ciudad\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/)
+  if (cityLinkMatch) {
+    location = decodeHtmlEntities(stripTags(cityLinkMatch[1])) || null
+  } else if (/\bRemoto\b/i.test(jobLocationHtml)) {
+    location = "Remoto"
+  }
 
   let seniority: string | null = null
   const seniorityMatch = jobLocationHtml.match(/<span itemprop="qualifications">\s*([\s\S]*?)\s*<\/span>/)
   if (seniorityMatch) seniority = decodeHtmlEntities(stripTags(seniorityMatch[1])) || null
 
+  // Category link also moved from /jobs/ to /empleos/ in the same redesign.
   let category: string | null = null
-  const categoryMatch = jobLocationHtml.match(/<a[^>]+href="\/jobs\/(?!city\/)[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/)
+  const categoryMatch = jobLocationHtml.match(/<a[^>]+href="\/empleos\/(?!ciudad\/)[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/)
   if (categoryMatch) category = decodeHtmlEntities(stripTags(categoryMatch[1])) || null
 
   let employmentType: string | null = null
